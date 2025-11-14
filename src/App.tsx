@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react'
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
 import pagesFile from '../form-pages.json'
 import promptsFile from '../prompts.json'
 import './App.css'
@@ -47,13 +57,42 @@ type PerplexityChatCompletionResponse = {
   choices?: PerplexityChatCompletionChoice[]
 }
 
+type CompetitorEntry = {
+  name: string
+  website: string
+  description: string
+  successLikelihood: string
+}
+
+type AiActionKey = 'tamsamsom' | 'competitors' | 'onepager'
+
+type AiActionConfig = {
+  stepIndex: number
+  promptKey: string
+  buttonLabel: string
+  description: string
+  successMessage: string
+  parseResult: (text: string, stepIndex: number) => AnswerMap
+  model?: string
+}
+
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+})
+
 const { pages: formPages } = pagesFile as FormPagesFile
 const prompts = promptsFile as PromptMap
-const tamsamsomPrompt = (prompts?.tamsamsom ?? '').trim()
 const summaryStepIndex = formPages.length
 const stepLabels = [...formPages.map((page) => page.title), 'Resumen']
 const tamSamSomStepIndex = formPages.findIndex(
   (page) => page.title.toLowerCase().replace(/\s+/g, '') === 'tamsamsom',
+)
+const competitorListStepIndex = formPages.findIndex(
+  (page) => page.title.toLowerCase().replace(/\s+/g, '') === 'listadecompetidores',
+)
+const onePagerStepIndex = formPages.findIndex(
+  (page) => page.title.toLowerCase().replace(/\s+/g, '') === 'onepager',
 )
 
 const slugify = (value: string) =>
@@ -66,6 +105,21 @@ const slugify = (value: string) =>
 
 const makeFieldId = (pageIndex: number, question: string) =>
   `step-${pageIndex}-${slugify(question)}`
+const estadoQuestionId = (() => {
+  const pageIndex = formPages.findIndex((page) =>
+    page.items.some((item) => item.question.trim().toLowerCase() === 'estado'),
+  )
+
+  if (pageIndex === -1) {
+    return null
+  }
+
+  const item = formPages[pageIndex].items.find(
+    (field) => field.question.trim().toLowerCase() === 'estado',
+  )
+  return item ? makeFieldId(pageIndex, item.question) : null
+})()
+const estadoOptions = ['Idea', 'Prototipo', 'Ventas iniciales', 'Escala'] as const
 
 const asText = (value: unknown) => {
   if (typeof value === 'string') {
@@ -135,6 +189,169 @@ const parseAiResult = (
   return null
 }
 
+const sanitizeTableCell = (value: string) => value.replace(/\|/g, '\\|').trim()
+
+const parseCompetitorEntries = (text: string): CompetitorEntry[] | null => {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const tryParse = (raw: string) => {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      const list = Array.isArray(parsed)
+        ? parsed
+        : typeof parsed === 'object' && parsed !== null && Array.isArray((parsed as { competitors?: unknown }).competitors)
+          ? (parsed as { competitors?: unknown[] }).competitors
+          : null
+
+      if (!list || list.length === 0) {
+        return null
+      }
+
+      const normalized = list
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return null
+          }
+          const record = entry as Record<string, unknown>
+          const name =
+            asText(
+              record.name ??
+                record.Nombre ??
+                record.title ??
+                record.company ??
+                record.organisation,
+            ) || 'Competidor sin nombre'
+          const website =
+            asText(
+              record.website ??
+                record.url ??
+                record.link ??
+                record.site ??
+                record.Web ??
+                record.web,
+            ) || 'N/D'
+          const description =
+            asText(
+              record.description ??
+                record.descripcion ??
+                record.summary ??
+                record.detalle ??
+                record.detalles,
+            ) || 'Descripción no disponible'
+          const success =
+            asText(
+              record.successLikelihood ??
+                record.success_probability ??
+                record.successProbability ??
+                record.success ??
+                record.probability ??
+                record['probabilidad'],
+            ) || 'Sin estimación'
+
+          return {
+            name,
+            website,
+            description,
+            successLikelihood: success,
+          }
+        })
+        .filter(Boolean) as CompetitorEntry[]
+
+      return normalized.length ? normalized : null
+    } catch {
+      return null
+    }
+  }
+
+  const direct = tryParse(trimmed)
+  if (direct) {
+    return direct
+  }
+
+  const blockMatch = trimmed.match(/```(?:json)?\s*([\s\S]+?)```/)
+  if (blockMatch) {
+    const blockParsed = tryParse(blockMatch[1])
+    if (blockParsed) {
+      return blockParsed
+    }
+  }
+
+  return null
+}
+
+const formatCompetitorTable = (entries: CompetitorEntry[]) => {
+  const header = 'Nombre | Web | Descripción | Probabilidad de Éxito'
+  const separator = '--- | --- | --- | ---'
+  const rows = entries.map((entry) => {
+    const row = [
+      sanitizeTableCell(entry.name),
+      sanitizeTableCell(entry.website),
+      sanitizeTableCell(entry.description),
+      sanitizeTableCell(entry.successLikelihood),
+    ]
+    return row.join(' | ')
+  })
+  return [header, separator, ...rows].join('\n')
+}
+
+const applyTamSamSomResult = (text: string, stepIndex: number): AnswerMap => {
+  const structured = parseAiResult(text)
+  if (!structured) {
+    throw new Error('No pudimos interpretar la respuesta del modelo.')
+  }
+
+  const items = formPages[stepIndex]?.items ?? []
+  const itemIds = items.map((item) => makeFieldId(stepIndex, item.question))
+  if (itemIds.length < 3) {
+    throw new Error('No encontramos los campos de TAM, SAM y SOM en el formulario.')
+  }
+
+  return {
+    [itemIds[0]]: structured.tam,
+    [itemIds[1]]: structured.sam,
+    [itemIds[2]]: structured.som,
+  }
+}
+
+const applyCompetitorsResult = (text: string, stepIndex: number): AnswerMap => {
+  const entries = parseCompetitorEntries(text)
+  if (!entries) {
+    throw new Error('No pudimos interpretar la lista de competidores devuelta por la IA.')
+  }
+
+  const page = formPages[stepIndex]
+  const question = page?.items?.[0]?.question
+  if (!question) {
+    throw new Error('No encontramos el campo de competidores en el formulario.')
+  }
+
+  const fieldId = makeFieldId(stepIndex, question)
+  return {
+    [fieldId]: formatCompetitorTable(entries),
+  }
+}
+
+const applyOnePagerResult = (text: string, stepIndex: number): AnswerMap => {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    throw new Error('La IA no devolvió contenido para el one-pager.')
+  }
+
+  const page = formPages[stepIndex]
+  const question = page?.items?.[0]?.question
+  if (!question) {
+    throw new Error('No encontramos el campo del one-pager en el formulario.')
+  }
+
+  const fieldId = makeFieldId(stepIndex, question)
+  return {
+    [fieldId]: trimmed,
+  }
+}
+
 const extractMessageContent = (content: PerplexityChatMessage['content']): string => {
   if (typeof content === 'string') {
     return content
@@ -159,16 +376,139 @@ const extractMessageContent = (content: PerplexityChatMessage['content']): strin
     .join('\n')
 }
 
+const aiActionConfigs: Record<AiActionKey, AiActionConfig> = {
+  tamsamsom: {
+    stepIndex: tamSamSomStepIndex,
+    promptKey: 'tamsamsom',
+    buttonLabel: 'Research using AI',
+    description:
+      'Usa tus respuestas previas para estimar TAM, SAM y SOM automáticamente con Perplexity.',
+    successMessage: 'Investigación de mercado completada con IA.',
+    parseResult: applyTamSamSomResult,
+  },
+  competitors: {
+    stepIndex: competitorListStepIndex,
+    promptKey: 'competitors',
+    buttonLabel: 'Research using AI',
+    description:
+      'Genera una lista priorizada de competidores con IA usando todo el contexto anterior.',
+    successMessage: 'Lista de competidores generada con IA.',
+    parseResult: applyCompetitorsResult,
+  },
+  onepager: {
+    stepIndex: onePagerStepIndex,
+    promptKey: 'onepager',
+    buttonLabel: 'Generar One-pager con IA',
+    description:
+      'Recopila todas tus respuestas en un one-pager ejecutivo listo para compartir.',
+    successMessage: 'One-pager generado con IA.',
+    parseResult: applyOnePagerResult,
+    model: 'sonar-reasoning-pro',
+  },
+}
+
+type MarkdownEditorProps = {
+  fieldId: string
+  value: string
+  rows: number
+  ariaDescribedBy: string
+  ariaLabelledBy: string
+  isEditing: boolean
+  onStartEditing: () => void
+  onStopEditing: () => void
+  onChangeValue: (value: string) => void
+}
+
+const MarkdownEditor = ({
+  fieldId,
+  value,
+  rows,
+  ariaDescribedBy,
+  ariaLabelledBy,
+  isEditing,
+  onStartEditing,
+  onStopEditing,
+  onChangeValue,
+}: MarkdownEditorProps) => {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const sanitizedMarkdown = useMemo(() => {
+    if (!value.trim()) {
+      return ''
+    }
+    const parsed = marked.parse(value)
+    return typeof parsed === 'string' ? DOMPurify.sanitize(parsed) : ''
+  }, [value])
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(
+        textareaRef.current.value.length,
+        textareaRef.current.value.length,
+      )
+    }
+  }, [isEditing])
+
+  const handlePreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onStartEditing()
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <textarea
+        id={fieldId}
+        ref={textareaRef}
+        aria-describedby={ariaDescribedBy}
+        aria-labelledby={ariaLabelledBy}
+        value={value}
+        onFocus={onStartEditing}
+        onBlur={onStopEditing}
+        onChange={(event) => onChangeValue(event.target.value)}
+        rows={rows}
+        placeholder="Escribe tu respuesta usando Markdown..."
+      />
+    )
+  }
+
+  const hasContent = Boolean(sanitizedMarkdown)
+
+  return (
+    <div
+      className={`markdown-preview${hasContent ? '' : ' empty'}`}
+      role="button"
+      tabIndex={0}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      onClick={onStartEditing}
+      onKeyDown={handlePreviewKeyDown}
+    >
+      {hasContent ? (
+        <div
+          className="markdown-preview-content"
+          dangerouslySetInnerHTML={{ __html: sanitizedMarkdown }}
+        />
+      ) : (
+        <span className="placeholder">
+          Haz clic para escribir y usa Markdown para dar formato.
+        </span>
+      )}
+    </div>
+  )
+}
+
 function App() {
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState<AnswerMap>({})
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
   const [dragActive, setDragActive] = useState(false)
-  const [isResearching, setIsResearching] = useState(false)
+  const [activeAiAction, setActiveAiAction] = useState<AiActionKey | null>(null)
+  const [editingMarkdownField, setEditingMarkdownField] = useState<string | null>(null)
 
   const isSummaryStep = currentStep === summaryStepIndex
   const progressPercent = (currentStep / (stepLabels.length - 1)) * 100
-  const isTamSamSomStep = currentStep === tamSamSomStepIndex
 
   const setSuccess = useCallback(
     (text: string) => setStatusMessage({ type: 'success', text }),
@@ -332,14 +672,22 @@ function App() {
     : currentStep === summaryStepIndex - 1
       ? 'Ver resumen'
       : 'Siguiente'
+  const currentAiActionEntry = (
+    Object.entries(aiActionConfigs) as [AiActionKey, AiActionConfig][]
+  ).find(([, config]) => config.stepIndex === currentStep)
+  const currentAiActionKey = currentAiActionEntry?.[0] ?? null
+  const currentAiAction = currentAiActionEntry?.[1] ?? null
+  const isAiActionLoading = activeAiAction !== null
+  const isCurrentActionLoading =
+    currentAiActionKey !== null && activeAiAction === currentAiActionKey
 
-  const buildBusinessContext = useCallback(() => {
-    if (tamSamSomStepIndex <= 0) {
+  const buildBusinessContext = useCallback((targetStepIndex: number) => {
+    if (targetStepIndex <= 0) {
       return 'Sin respuestas previas disponibles.'
     }
 
     const sections = formPages
-      .slice(0, tamSamSomStepIndex)
+      .slice(0, targetStepIndex)
       .map((page, pageIndex) => {
         const entries = page.items
           .map((item) => {
@@ -359,86 +707,74 @@ function App() {
       .filter(Boolean)
 
     return sections.length > 0 ? sections.join('\n\n') : 'Sin respuestas previas disponibles.'
-  }, [answers, tamSamSomStepIndex])
+  }, [answers])
 
-  const handleResearchUsingAi = useCallback(async () => {
-    if (tamSamSomStepIndex === -1) {
-      setError('No encontramos la sección de mercado para ejecutar la investigación.')
-      return
-    }
-
-    if (!tamsamsomPrompt) {
-      setError('El prompt de investigación no está disponible.')
-      return
-    }
-
-    const apiKey = import.meta.env.VITE_PERPLEXITY_API_KEY
-    if (!apiKey) {
-      setError('Configura VITE_PERPLEXITY_API_KEY en tu archivo .env para usar la investigación.')
-      return
-    }
-
-    setIsResearching(true)
-    try {
-      const response = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'sonar-pro',
-          temperature: 0.1,
-          messages: [
-            {
-              role: 'user',
-              content: `${tamsamsomPrompt}\n${buildBusinessContext()}`,
-            },
-          ],
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('La API de Perplexity respondió con un error.')
+  const handleAiAction = useCallback(
+    async (actionKey: AiActionKey) => {
+      const action = aiActionConfigs[actionKey]
+      if (!action || action.stepIndex === -1) {
+        setError('No encontramos la sección correspondiente para la investigación.')
+        return
       }
 
-      const payload = (await response.json()) as PerplexityChatCompletionResponse
-      const firstChoice = payload.choices?.[0]
-      const aiText = extractMessageContent(firstChoice?.message?.content ?? '')
-      if (!aiText.trim()) {
-        throw new Error('La respuesta de la IA vino vacía.')
+      const promptText = (prompts?.[action.promptKey] ?? '').trim()
+      if (!promptText) {
+        setError('El prompt de investigación no está disponible.')
+        return
       }
 
-      const structured = parseAiResult(aiText)
-      if (!structured) {
-        throw new Error('No pudimos interpretar la respuesta del modelo.')
+      const apiKey = import.meta.env.VITE_PERPLEXITY_API_KEY
+      if (!apiKey) {
+        setError('Configura VITE_PERPLEXITY_API_KEY en tu archivo .env para usar la investigación.')
+        return
       }
 
-      const itemIds = formPages[tamSamSomStepIndex].items.map((item) =>
-        makeFieldId(tamSamSomStepIndex, item.question),
-      )
-      if (itemIds.length < 3) {
-        throw new Error('No encontramos los campos de TAM, SAM y SOM en el formulario.')
-      }
+      setActiveAiAction(actionKey)
+      try {
+        const response = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: action.model ?? 'sonar-pro',
+            temperature: 0.1,
+            messages: [
+              {
+                role: 'user',
+                content: `${promptText}\n${buildBusinessContext(action.stepIndex)}`,
+              },
+            ],
+          }),
+        })
 
-      setAnswers((prev) => ({
-        ...prev,
-        [itemIds[0]]: structured.tam,
-        [itemIds[1]]: structured.sam,
-        [itemIds[2]]: structured.som,
-      }))
-      setSuccess('Investigación completada con IA.')
-    } catch (error) {
-      console.error('Perplexity search error', error)
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No pudimos completar la investigación automática.',
-      )
-    } finally {
-      setIsResearching(false)
-    }
-  }, [buildBusinessContext, setError, setSuccess, tamSamSomStepIndex, tamsamsomPrompt])
+        if (!response.ok) {
+          throw new Error('La API de Perplexity respondió con un error.')
+        }
+
+        const payload = (await response.json()) as PerplexityChatCompletionResponse
+        const aiText = extractMessageContent(payload.choices?.[0]?.message?.content ?? '')
+        if (!aiText.trim()) {
+          throw new Error('La respuesta de la IA vino vacía.')
+        }
+
+        const updates = action.parseResult(aiText, action.stepIndex)
+        setAnswers((prev) => ({ ...prev, ...updates }))
+        setSuccess(action.successMessage)
+      } catch (error) {
+        console.error('Perplexity chat error', error)
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'No pudimos completar la investigación automática.',
+        )
+      } finally {
+        setActiveAiAction(null)
+      }
+    },
+    [buildBusinessContext, setError, setSuccess],
+  )
 
   return (
     <div className="app-shell">
@@ -493,21 +829,18 @@ function App() {
               </p>
               <h2>{currentPage.title}</h2>
             </header>
-            {isTamSamSomStep && (
+            {currentAiAction && currentAiActionKey && (
               <div className="ai-research-banner">
                 <div>
-                  <p>
-                    Usa tus respuestas previas para estimar TAM, SAM y SOM automáticamente con
-                    Perplexity.
-                  </p>
+                  <p>{currentAiAction.description}</p>
                 </div>
                 <button
                   type="button"
                   className="primary-button"
-                  onClick={handleResearchUsingAi}
-                  disabled={isResearching}
+                  onClick={() => handleAiAction(currentAiActionKey)}
+                  disabled={isAiActionLoading}
                 >
-                  {isResearching ? 'Investigando...' : 'Research using AI'}
+                  {isCurrentActionLoading ? 'Investigando...' : currentAiAction.buttonLabel}
                 </button>
               </div>
             )}
@@ -517,22 +850,54 @@ function App() {
                 const fieldId = makeFieldId(currentStep, item.question)
                 const helpId = `${fieldId}-help`
                 const answer = answers[fieldId] ?? ''
+                const isMarkdownField = fieldId !== estadoQuestionId
+                const isEditing = editingMarkdownField === fieldId
                 return (
-                  <label key={`${fieldId}-${itemIndex}`} className="form-field" htmlFor={fieldId}>
+                  <div key={`${fieldId}-${itemIndex}`} className="form-field">
                     <div className="field-top">
                       <span className="area-pill">{item.area}</span>
-                      <h3>{item.question}</h3>
+                      <h3 id={`${fieldId}-label`}>{item.question}</h3>
                     </div>
-                    <textarea
-                      id={fieldId}
-                      aria-describedby={helpId}
-                      value={answer}
-                      onChange={(event) => handleInputChange(fieldId, event.target.value)}
-                      rows={item.help.length > 120 ? 6 : 4}
-                      placeholder="Escribe tu respuesta..."
-                    />
+                    {isMarkdownField ? (
+                      <MarkdownEditor
+                        fieldId={fieldId}
+                        value={answer}
+                        rows={item.help.length > 120 ? 6 : 4}
+                        ariaDescribedBy={helpId}
+                        ariaLabelledBy={`${fieldId}-label`}
+                        isEditing={isEditing}
+                        onStartEditing={() => setEditingMarkdownField(fieldId)}
+                        onStopEditing={() =>
+                          setEditingMarkdownField((current) => (current === fieldId ? null : current))
+                        }
+                        onChangeValue={(value) => handleInputChange(fieldId, value)}
+                      />
+                    ) : (
+                      <div
+                        className="radio-group"
+                        role="radiogroup"
+                        aria-labelledby={`${fieldId}-label`}
+                        aria-describedby={helpId}
+                      >
+                        {estadoOptions.map((option) => (
+                          <label
+                            key={option}
+                            className={`radio-pill${answer === option ? ' selected' : ''}`}
+                          >
+                            <input
+                              type="radio"
+                              name={fieldId}
+                              value={option}
+                              checked={answer === option}
+                              onChange={(event) => handleInputChange(fieldId, event.target.value)}
+                            />
+                            <span>{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                     <small id={helpId}>{item.help}</small>
-                  </label>
+                  </div>
                 )
               })}
             </form>

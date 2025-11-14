@@ -134,6 +134,16 @@
           "help": "Tabla con 10 potenciales competidores ordenados según probabilidad de éxito comparados con nosotros teniendo en cuenta todo lo que sabemos del proyecto y las debilidades y fortalezas analizadas.\nNombre, Web, Descripción, Probabilidad de Éxito"
         }
       ]
+    },
+    {
+      "title": "ONE PAGER",
+      "items": [
+        {
+          "area": "Resumen",
+          "question": "One-pager ejecutivo",
+          "help": "Documento en Markdown con gráficos y narrativa que cubra cada bloque definido en ONE_PAGER.md."
+        }
+      ]
     }
   ]
 }

@@ -5,10 +5,11 @@ Keep this document up to date so future sessions understand the current shape of
 ## Snapshot (Feb 2025)
 - Framework: React + TypeScript via Vite, configured as a PWA with `vite-plugin-pwa`.
 - Data source: `form-pages.json` in the repo root. The UI **imports this file directly**; do **not** inline or duplicate its content elsewhere.
-- Primary component: `src/App.tsx` implements five form screens (plus summary), breadcrumbs, next/back actions, export to JSON, and drag/drop import.
+- Primary component: `src/App.tsx` implements six form screens (One-pager incluido) más el resumen, breadcrumbs, next/back actions, export to JSON, y drag/drop import.
+- Input UX: `Estado` is a discrete radio-pills selector (Idea/Prototipo/Ventas iniciales/Escala) and every other answer uses a Markdown editor with preview-on-blur (powered by `marked` + `dompurify`).
 - Styling: `src/App.css` for layout/components, `src/index.css` for globals. Visual identity uses gradients + pill breadcrumbs.
 - Assets/config: PWA manifest in `vite.config.ts`, icon `public/pwa-icon.svg`, entry `src/main.tsx`.
-- AI assist: The TAM/SAM/SOM screen now has a “Research using AI” action that calls Perplexity’s `chat/completions` endpoint (model `sonar-pro`). Prompts live in `prompts.json` (`tamsamsom`) and it requires `VITE_PERPLEXITY_API_KEY` in `.env` (see `.env.sample`).
+- AI assist: The TAM/SAM/SOM, LISTA DE COMPETIDORES y ONE PAGER screens expose a “Research using AI” action powered by Perplexity’s `chat/completions`. TAM/SAM/SOM and Competidores use `sonar-pro`, while the One-pager uses `sonar-reasoning-pro`. Prompts live in `prompts.json` (`tamsamsom`, `competitors`, `onepager`) and it requires `VITE_PERPLEXITY_API_KEY` in `.env` (see `.env.sample`).
 
 ## Typical Workflow
 1. Install deps with `npm install`.
@@ -22,3 +23,7 @@ Keep this document up to date so future sessions understand the current shape of
 - When responding to new requests that alter the high-level flow (pages, navigation behavior, export format), append a dated bullet or short paragraph summarizing what changed and why.
 
 Treat AGENTS.md as the shared memory for multi-session work: concise, essential, and always fresh. Remove outdated details rather than letting them rot—future agents depend on it.
+
+## Updates
+- Feb 2025: Added Markdown editor + preview for every field except Estado, and converted Estado into radio pills so users pick a defined stage.
+- Mar 2025: Added ONE PAGER step with AI-powered one-pager generation using sonar-reasoning-pro fed by prompts in `prompts.json`.
