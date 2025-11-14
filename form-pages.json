@@ -1,0 +1,139 @@
+{
+  "pages": [
+    {
+      "title": "Ficha",
+      "items": [
+        {
+          "area": "Definición",
+          "question": "Título del proyecto",
+          "help": "Título claro y conciso"
+        },
+        {
+          "area": "Definición",
+          "question": "Descripción del proyecto",
+          "help": "No más de 600 palabras"
+        },
+        {
+          "area": "Definición",
+          "question": "Descripción de cliente ideal",
+          "help": "No más de 600 palabras"
+        },
+        {
+          "area": "Definición",
+          "question": "Estado",
+          "help": "Idea | Prototipo | Ventas iniciales | Escala"
+        },
+        {
+          "area": "Definición",
+          "question": "Nombre y descripción del Competidor a batir",
+          "help": "A quiénes compran o comprarían tus clientes"
+        },
+        {
+          "area": "Definición",
+          "question": "Equipo",
+          "help": "Lista de perfiles en linkedIn, nombre, apellidos y resposabilidad en el proyecto"
+        }
+      ]
+    },
+    {
+      "title": "Business Model Canvas",
+      "items": [
+        {
+          "area": "Producto o servicio",
+          "question": "Quiénes son tus clientes",
+          "help": "Empieza contando si tu proyecto es de tipo B2B, B2C, Nicho o Mass Market. Cuenta cómo es tu cliente ideal y qué problema a resolver es el que te interesa,"
+        },
+        {
+          "area": "Producto o servicio",
+          "question": "Propuesta de Valor",
+          "help": "Por qué tu proyecto y no otro\nFuncional: Mejoras de rendimiento o ahorros.\nEmocional: Confianza, bienestar, progreso\nSocial o Ambiental: Reducción de la huella de carbono"
+        },
+        {
+          "area": "Producto o servicio",
+          "question": "Canales",
+          "help": "Cómo te conocen\nCómo llegas a tus clientes"
+        },
+        {
+          "area": "Producto o servicio",
+          "question": "Relación con clientes",
+          "help": "Cómo fidelizas a tus clientes\nCómo sabes el nivel de satisfacción\nHay efecto \"red\" que te proteja de otro competidores"
+        },
+        {
+          "area": "Viabilidad",
+          "question": "Fuentes de Ingreso",
+          "help": "Todas las posibles entre:\nFreemium | publicidad | tarifa horaria | tarifa por proyecto | comisión | ecommerce | patrocinios | franquicias "
+        },
+        {
+          "area": "Viabilidad",
+          "question": "Estructura de Costes",
+          "help": "Describe costes fijos y costes variables una vez en marcha"
+        },
+        {
+          "area": "Factibilidad",
+          "question": "Recursos Clave",
+          "help": "Físicos | Intelectuales | Financieros | Socios | Equipo humano"
+        },
+        {
+          "area": "Factibilidad",
+          "question": "Socios Clave",
+          "help": "Acuerdos | codesarrollo | Asesores"
+        }
+      ]
+    },
+    {
+      "title": "DAFO",
+      "items": [
+        {
+          "area": "Análisis",
+          "question": "Fortalezas",
+          "help": "Qué hacemos bien\nQué nos hace especiales\nQué les gusta a los demás de nuestro producto o nosotros"
+        },
+        {
+          "area": "Análisis",
+          "question": "Debilidades",
+          "help": "Qué no está funcionando bien y por qué\nQué podemos mejorar"
+        },
+        {
+          "area": "Análisis",
+          "question": "Oportunidades",
+          "help": "Qué metas tenemos para este año\nQué recursos podemos usar para mejorar en nuestras debilidades"
+        },
+        {
+          "area": "Análisis",
+          "question": "Amenazas",
+          "help": "Qué cambios son preocupantes\nEn qué nos superan los competidores\nNuevas tendencias"
+        }
+      ]
+    },
+    {
+      "title": "TAMSAMSOM",
+      "items": [
+        {
+          "area": "Mercado",
+          "question": "TAM - Mercado Total",
+          "help": "Es decir, que en este paso, el objetivo es estimar cuál es el volumen de ingresos anuales que se genera en el mercado al que queremos entrar. Esto nos dará una idea global de las posibilidades que ofrece un negocio o la posibilidad de escalarlo."
+        },
+        {
+          "area": "Mercado",
+          "question": "SAM - Mercado que podemos servir",
+          "help": "Qué parte del mercado podemos cubrir con los recursos y el modelo de producción actual. Esto nos permitirá dimensionar la capacidad de nuestro negocio y estimar el volumen máximo de ingresos al que podemos optar."
+        },
+        {
+          "area": "Mercado",
+          "question": "SOM - Mercado que podemos conseguir",
+          "help": "Estimar el volumen de ingresos que podríamos obtener durante un tiempo determinado, normalmente un año. No obstante, es importante realizar una estimación realista a partir de los datos obtenidos en las anteriores fases."
+        }
+      ]
+    },
+    {
+      "title": "LISTA DE COMPETIDORES",
+      "items": [
+        {
+          "area": "Competencia",
+          "question": "Listado de competidores",
+          "help": "Tabla con 10 potenciales competidores ordenados según probabilidad de éxito comparados con nosotros teniendo en cuenta todo lo que sabemos del proyecto y las debilidades y fortalezas analizadas.\nNombre, Web, Descripción, Probabilidad de Éxito"
+        }
+      ]
+    }
+  ]
+}
